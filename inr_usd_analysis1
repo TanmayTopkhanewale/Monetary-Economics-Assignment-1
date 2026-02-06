@@ -1,0 +1,327 @@
+"""
+Daily and Cumulative Returns Comparison - NIFTY 50 vs NIFTY 100
+Last 3 Years Analysis
+"""
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from datetime import datetime, timedelta
+import warnings
+warnings.filterwarnings('ignore')
+
+def download_nifty_data():
+    """
+    Download NIFTY 50 and NIFTY 100 data
+    You can use yfinance, nsepy, or manual download from NSE
+    """
+    try:
+        import yfinance as yf
+        
+        # Calculate date range - last 3 years
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=3*365 + 30)  # Extra 30 days for buffer
+        
+        print(f"Downloading data from {start_date.date()} to {end_date.date()}...")
+        
+        # Download NIFTY 50 (^NSEI) and NIFTY 100 (^CNX100)
+        nifty50 = yf.download('^NSEI', start=start_date, end=end_date, progress=False)
+        nifty100 = yf.download('^CNX100', start=start_date, end=end_date, progress=False)
+        
+        if nifty50.empty or nifty100.empty:
+            print("Note: yfinance download incomplete. Trying alternative symbols...")
+            # Try alternative symbols
+            nifty50 = yf.download('NIFTY50.NS', start=start_date, end=end_date, progress=False)
+            nifty100 = yf.download('NIFTY100.NS', start=start_date, end=end_date, progress=False)
+        
+        return nifty50, nifty100
+        
+    except ImportError:
+        print("yfinance not installed. Installing...")
+        import subprocess
+        subprocess.check_call(['pip', 'install', 'yfinance', '--break-system-packages'])
+        return download_nifty_data()
+    except Exception as e:
+        print(f"Error downloading data: {e}")
+        return None, None
+
+def load_from_csv(nifty50_path='nifty50.csv', nifty100_path='nifty100.csv'):
+    """Load data from CSV files if manual download is needed"""
+    try:
+        nifty50 = pd.read_csv(nifty50_path, index_col=0, parse_dates=True)
+        nifty100 = pd.read_csv(nifty100_path, index_col=0, parse_dates=True)
+        return nifty50, nifty100
+    except Exception as e:
+        print(f"Error loading CSV files: {e}")
+        return None, None
+
+def calculate_returns(data):
+    """Calculate daily percentage returns"""
+    # Use Close price for returns calculation
+    if 'Close' in data.columns:
+        prices = data['Close']
+    elif 'Adj Close' in data.columns:
+        prices = data['Adj Close']
+    else:
+        prices = data.iloc[:, 0]  # Use first column
+    
+    # Calculate daily returns
+    daily_returns = prices.pct_change() * 100  # Convert to percentage
+    return daily_returns.dropna()
+
+def calculate_cumulative_returns(data):
+    """Calculate cumulative returns"""
+    # Use Close price
+    if 'Close' in data.columns:
+        prices = data['Close']
+    elif 'Adj Close' in data.columns:
+        prices = data['Adj Close']
+    else:
+        prices = data.iloc[:, 0]
+    
+    # Calculate cumulative returns from first value
+    cumulative = ((prices / prices.iloc[0]) - 1) * 100  # Percentage
+    return cumulative
+
+def plot_returns_comparison(nifty50, nifty100, save_path='nifty_comparison.png'):
+    """
+    Create two-panel plot:
+    1. Daily returns comparison
+    2. Cumulative returns comparison
+    """
+    # Calculate returns
+    nifty50_daily = calculate_returns(nifty50)
+    nifty100_daily = calculate_returns(nifty100)
+    
+    nifty50_cumulative = calculate_cumulative_returns(nifty50)
+    nifty100_cumulative = calculate_cumulative_returns(nifty100)
+    
+    # Create figure with 2 subplots
+    fig, axes = plt.subplots(2, 1, figsize=(14, 10))
+    
+    # =======================
+    # Plot 1: Daily Returns
+    # =======================
+    ax1 = axes[0]
+    
+    # Plot daily returns
+    ax1.plot(nifty50_daily.index, nifty50_daily.values, 
+             color='#FF6B35', alpha=0.7, linewidth=0.8, label='NIFTY 50')
+    ax1.plot(nifty100_daily.index, nifty100_daily.values, 
+             color='#4ECDC4', alpha=0.7, linewidth=0.8, label='NIFTY 100')
+    
+    # Add zero line
+    ax1.axhline(y=0, color='black', linestyle='-', linewidth=0.5, alpha=0.3)
+    
+    # Formatting
+    ax1.set_title('Daily Returns Comparison - Last 3 Years', 
+                  fontsize=13, fontweight='bold', pad=15)
+    ax1.set_xlabel('Date', fontsize=10)
+    ax1.set_ylabel('Daily Returns (%)', fontsize=10)
+    ax1.legend(loc='upper right', fontsize=9, framealpha=0.9)
+    ax1.grid(True, alpha=0.2, linestyle='-', linewidth=0.5)
+    ax1.set_ylim(-6, 6)  # Adjust based on your data
+    
+    # ==========================
+    # Plot 2: Cumulative Returns
+    # ==========================
+    ax2 = axes[1]
+    
+    # Plot cumulative returns
+    ax2.plot(nifty50_cumulative.index, nifty50_cumulative.values,
+             color='#1E88E5', linewidth=2, label='NIFTY 50')
+    ax2.plot(nifty100_cumulative.index, nifty100_cumulative.values,
+             color='#FFA726', linewidth=2, label='NIFTY 100')
+    
+    # Add zero line
+    ax2.axhline(y=0, color='black', linestyle='-', linewidth=0.5, alpha=0.3)
+    
+    # Formatting
+    ax2.set_title('Cumulative Returns Comparison - Last 3 Years',
+                  fontsize=13, fontweight='bold', pad=15)
+    ax2.set_xlabel('Date', fontsize=10)
+    ax2.set_ylabel('Cumulative Returns (%)', fontsize=10)
+    ax2.legend(loc='upper left', fontsize=9, framealpha=0.9)
+    ax2.grid(True, alpha=0.2, linestyle='-', linewidth=0.5)
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    # Save figure
+    plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+    print(f"\n✓ Plot saved as '{save_path}'")
+    
+    return fig
+
+def calculate_statistics(nifty50, nifty100):
+    """Calculate comparison statistics"""
+    # Calculate returns
+    nifty50_daily = calculate_returns(nifty50)
+    nifty100_daily = calculate_returns(nifty100)
+    
+    nifty50_cumulative = calculate_cumulative_returns(nifty50)
+    nifty100_cumulative = calculate_cumulative_returns(nifty100)
+    
+    stats = {
+        'NIFTY 50': {
+            'Total Return (%)': nifty50_cumulative.iloc[-1],
+            'Annualized Return (%)': (nifty50_cumulative.iloc[-1] / 3),  # Simple approximation
+            'Volatility (%)': nifty50_daily.std(),
+            'Best Day (%)': nifty50_daily.max(),
+            'Worst Day (%)': nifty50_daily.min(),
+            'Sharpe Ratio (approx)': (nifty50_daily.mean() / nifty50_daily.std()) * np.sqrt(252) if nifty50_daily.std() != 0 else 0
+        },
+        'NIFTY 100': {
+            'Total Return (%)': nifty100_cumulative.iloc[-1],
+            'Annualized Return (%)': (nifty100_cumulative.iloc[-1] / 3),
+            'Volatility (%)': nifty100_daily.std(),
+            'Best Day (%)': nifty100_daily.max(),
+            'Worst Day (%)': nifty100_daily.min(),
+            'Sharpe Ratio (approx)': (nifty100_daily.mean() / nifty100_daily.std()) * np.sqrt(252) if nifty100_daily.std() != 0 else 0
+        }
+    }
+    
+    return stats
+
+def main():
+    print("=" * 80)
+    print("NIFTY 50 vs NIFTY 100 - Daily and Cumulative Returns Analysis")
+    print("Last 3 Years")
+    print("=" * 80)
+    
+    # Try to download data
+    print("\nAttempting to download data from Yahoo Finance...")
+    nifty50, nifty100 = download_nifty_data()
+    
+    # If download fails, try loading from CSV
+    if nifty50 is None or nifty100 is None or nifty50.empty or nifty100.empty:
+        print("\nDownload failed. Trying to load from CSV files...")
+        nifty50, nifty100 = load_from_csv()
+    
+    if nifty50 is None or nifty100 is None or nifty50.empty or nifty100.empty:
+        print("\n" + "=" * 80)
+        print("ERROR: Could not load data")
+        print("=" * 80)
+        print("\nPlease download data manually:")
+        print("1. Go to: https://www.nseindia.com/")
+        print("2. Download historical data for NIFTY 50 and NIFTY 100")
+        print("3. Save as 'nifty50.csv' and 'nifty100.csv'")
+        print("4. Or use NSEpy library")
+        print("\nAlternatively:")
+        print("- Use Yahoo Finance: ^NSEI (NIFTY 50) and ^CNX100 (NIFTY 100)")
+        return
+    
+    print(f"\n✓ Successfully loaded data")
+    print(f"  NIFTY 50: {len(nifty50)} trading days")
+    print(f"  Date range: {nifty50.index.min().date()} to {nifty50.index.max().date()}")
+    print(f"  NIFTY 100: {len(nifty100)} trading days")
+    print(f"  Date range: {nifty100.index.min().date()} to {nifty100.index.max().date()}")
+    
+    # Calculate statistics
+    print("\nCalculating statistics...")
+    stats = calculate_statistics(nifty50, nifty100)
+    
+    # Display statistics
+    print("\n" + "=" * 80)
+    print("PERFORMANCE STATISTICS (Last 3 Years)")
+    print("=" * 80)
+    
+    stats_df = pd.DataFrame(stats).T
+    print("\n" + stats_df.to_string())
+    
+    # Create plots
+    print("\nGenerating plots...")
+    plot_returns_comparison(nifty50, nifty100, save_path='/mnt/user-data/outputs/nifty_comparison.png')
+    
+    # Save to Excel
+    print("\nSaving detailed analysis to Excel...")
+    with pd.ExcelWriter('/mnt/user-data/outputs/nifty_analysis.xlsx', engine='openpyxl') as writer:
+        # Daily returns
+        daily_returns = pd.DataFrame({
+            'NIFTY 50 Daily Returns (%)': calculate_returns(nifty50),
+            'NIFTY 100 Daily Returns (%)': calculate_returns(nifty100)
+        })
+        daily_returns.to_excel(writer, sheet_name='Daily Returns')
+        
+        # Cumulative returns
+        cumulative_returns = pd.DataFrame({
+            'NIFTY 50 Cumulative Returns (%)': calculate_cumulative_returns(nifty50),
+            'NIFTY 100 Cumulative Returns (%)': calculate_cumulative_returns(nifty100)
+        })
+        cumulative_returns.to_excel(writer, sheet_name='Cumulative Returns')
+        
+        # Statistics
+        stats_df.to_excel(writer, sheet_name='Statistics')
+        
+        # Raw price data
+        nifty50[['Close']].to_excel(writer, sheet_name='NIFTY 50 Prices')
+        nifty100[['Close']].to_excel(writer, sheet_name='NIFTY 100 Prices')
+        
+        # Analysis notes
+        analysis = """
+NIFTY 50 vs NIFTY 100 ANALYSIS
+
+COMPOSITION:
+- NIFTY 50: Top 50 companies by market capitalization on NSE
+- NIFTY 100: Top 100 companies by market capitalization on NSE
+  (includes all NIFTY 50 stocks plus 50 more)
+
+KEY OBSERVATIONS:
+
+1. RETURNS COMPARISON:
+   - Compare total returns over 3 years
+   - NIFTY 100 typically shows similar but slightly different returns
+   - Broader diversification in NIFTY 100
+
+2. VOLATILITY:
+   - Daily returns volatility indicates market risk
+   - NIFTY 100 may show slightly lower volatility due to broader base
+
+3. CORRELATION:
+   - Both indices typically move together
+   - Major market events affect both similarly
+   - Divergence can indicate sector rotation
+
+4. RISK-ADJUSTED RETURNS:
+   - Sharpe ratio compares returns relative to volatility
+   - Higher Sharpe ratio = better risk-adjusted performance
+
+INVESTMENT IMPLICATIONS:
+
+For NIFTY 50:
++ More liquid
++ Lower expense ratios in index funds
++ Concentrated exposure to top companies
+- Higher concentration risk
+
+For NIFTY 100:
++ Better diversification
++ Exposure to mid-cap within large-cap space
++ Potentially smoother returns
+- Slightly higher tracking error in funds
+
+WHICH IS BETTER?
+
+It depends on:
+- Risk appetite: NIFTY 100 for more diversification
+- Liquidity needs: NIFTY 50 for higher liquidity
+- Cost sensitivity: NIFTY 50 funds typically cheaper
+- Investment horizon: Both suitable for long-term
+
+Generally, the difference in returns is minimal over long periods,
+so choose based on your preference for concentration vs diversification.
+        """
+        
+        analysis_df = pd.DataFrame({'Analysis Notes': [analysis]})
+        analysis_df.to_excel(writer, sheet_name='Analysis', index=False)
+    
+    print("\n" + "=" * 80)
+    print("ANALYSIS COMPLETE")
+    print("=" * 80)
+    print("\nOutput files:")
+    print("  1. nifty_comparison.png - Visual comparison")
+    print("  2. nifty_analysis.xlsx - Detailed data and statistics")
+    print("\n" + "=" * 80)
+
+if __name__ == "__main__":
+    main()
